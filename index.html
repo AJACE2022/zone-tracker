@@ -1,529 +1,341 @@
-import React, { useState, useEffect, useRef } from 'react';
-
-export default function ZoneTracker() {
-  const [timer, setTimer] = useState(0);
-  const [testTimer, setTestTimer] = useState(0);
-  const [dayLogged, setDayLogged] = useState(0);
-  const [weeklyLogged, setWeeklyLogged] = useState(0);
-  const [testDayLogged, setTestDayLogged] = useState(0);
-  const [testWeeklyLogged, setTestWeeklyLogged] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isTestRunning, setIsTestRunning] = useState(false);
-  const [weeklyBuffer, setWeeklyBuffer] = useState(21 * 3600);
-  const [testWeeklyBuffer, setTestWeeklyBuffer] = useState(20);
-  const [weekNumber, setWeekNumber] = useState(1);
-  const [dayName, setDayName] = useState('Monday');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const intervalRef = useRef(null);
-  const testIntervalRef = useRef(null);
-
-  const TOTAL_WEEKLY_SECONDS = 21 * 3600; // 21 hours in seconds
-  const TOTAL_TEST_WEEKLY_SECONDS = 20; // 20 seconds
-
-  // Update day name based on internal tracking
-  useEffect(() => {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const today = new Date().getDay();
-    const adjustedDay = today === 0 ? 6 : today - 1;
-    setDayName(days[adjustedDay]);
-  }, []);
-
-  // Timer intervals
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setTimer((prev) => prev + 1);
-      }, 1000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isRunning]);
-
-  useEffect(() => {
-    if (isTestRunning) {
-      testIntervalRef.current = setInterval(() => {
-        setTestTimer((prev) => prev + 1);
-      }, 1000);
-    } else {
-      clearInterval(testIntervalRef.current);
-    }
-    return () => clearInterval(testIntervalRef.current);
-  }, [isTestRunning]);
-
-  // Format time display
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatTimeShort = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
-  };
-
-  // Log time function
-  const handleLogTime = () => {
-    if (timer > 0) {
-      setDayLogged((prev) => prev + timer);
-      setWeeklyLogged((prev) => prev + timer);
-      setWeeklyBuffer((prev) => Math.max(0, prev - timer));
-      setTimer(0);
-      setIsRunning(false);
-    }
-  };
-
-  const handleTestLogTime = () => {
-    if (testTimer > 0) {
-      setTestDayLogged((prev) => prev + testTimer);
-      setTestWeeklyLogged((prev) => prev + testTimer);
-      setTestWeeklyBuffer((prev) => Math.max(0, prev - testTimer));
-      setTestTimer(0);
-      setIsTestRunning(false);
-    }
-  };
-
-  // Reset day only (keeps weekly counts)
-  const handleResetDay = () => {
-    setTimer(0);
-    setTestTimer(0);
-    setDayLogged(0);
-    setTestDayLogged(0);
-    setIsRunning(false);
-    setIsTestRunning(false);
-  };
-
-  // Reset entire week
-  const handleResetWeek = () => {
-    setTimer(0);
-    setTestTimer(0);
-    setDayLogged(0);
-    setTestDayLogged(0);
-    setWeeklyLogged(0);
-    setTestWeeklyLogged(0);
-    setWeeklyBuffer(TOTAL_WEEKLY_SECONDS);
-    setTestWeeklyBuffer(TOTAL_TEST_WEEKLY_SECONDS);
-    setWeekNumber((prev) => prev + 1);
-    setIsRunning(false);
-    setIsTestRunning(false);
-  };
-
-  // Request notification permission
-  const handleNotificationPermission = () => {
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') {
-            setNotificationsEnabled(true);
-          }
-        });
-      }
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8">
-      <style>{`
-        * {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        .zone-tracker {
-          max-width: 900px;
-          margin: 0 auto;
-        }
-
-        .header {
-          text-center mb-12;
-        }
-
-        .title {
-          font-size: 3.5rem;
-          font-weight: 700;
-          color: #fff;
-          margin: 0 0 0.5rem 0;
-          letter-spacing: -1px;
-        }
-
-        .subtitle {
-          font-size: 1rem;
-          color: #94a3b8;
-          margin: 0;
-        }
-
-        .timer-section {
-          background: rgba(15, 23, 42, 0.8);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 16px;
-          padding: 32px;
-          margin-bottom: 24px;
-          transition: all 0.3s ease;
-        }
-
-        .timer-section:hover {
-          border-color: rgba(148, 163, 184, 0.3);
-          background: rgba(15, 23, 42, 0.95);
-        }
-
-        .timer-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
-
-        .timer-label {
-          font-size: 1.125rem;
-          font-weight: 600;
-          color: #e2e8f0;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .timer-badge {
-          display: inline-block;
-          background: linear-gradient(135deg, #3b82f6, #1e40af);
-          color: white;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-
-        .timer-badge.test {
-          background: linear-gradient(135deg, #f59e0b, #b45309);
-        }
-
-        .timer-display {
-          font-size: 4rem;
-          font-weight: 700;
-          font-family: 'Courier New', monospace;
-          color: #3b82f6;
-          text-align: center;
-          margin: 32px 0;
-          letter-spacing: 4px;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .timer-display.test {
-          color: #f59e0b;
-        }
-
-        .button-group {
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-          flex-wrap: wrap;
-          margin-bottom: 28px;
-        }
-
-        .btn {
-          padding: 12px 28px;
-          border: none;
-          border-radius: 8px;
-          font-size: 0.95rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .btn-primary {
-          background: linear-gradient(135deg, #3b82f6, #1e40af);
-          color: white;
-          flex: 1;
-          min-width: 120px;
-        }
-
-        .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
-        }
-
-        .btn-primary:active {
-          transform: translateY(0);
-        }
-
-        .btn-primary.active {
-          background: linear-gradient(135deg, #ef4444, #991b1b);
-        }
-
-        .btn-secondary {
-          background: rgba(148, 163, 184, 0.1);
-          color: #cbd5e1;
-          border: 1px solid rgba(148, 163, 184, 0.2);
-          flex: 1;
-          min-width: 100px;
-        }
-
-        .btn-secondary:hover {
-          background: rgba(148, 163, 184, 0.2);
-          border-color: rgba(148, 163, 184, 0.4);
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 16px;
-          margin-top: 24px;
-          padding-top: 24px;
-          border-top: 1px solid rgba(148, 163, 184, 0.1);
-        }
-
-        .stat-card {
-          background: rgba(30, 41, 59, 0.6);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 8px;
-          padding: 16px;
-          text-align: center;
-        }
-
-        .stat-label {
-          font-size: 0.8rem;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #94a3b8;
-          margin-bottom: 8px;
-        }
-
-        .stat-value {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #3b82f6;
-          font-family: 'Courier New', monospace;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .stat-value.test {
-          color: #f59e0b;
-        }
-
-        .info-section {
-          background: rgba(15, 23, 42, 0.8);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 16px;
-          padding: 24px;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
-          margin-bottom: 24px;
-        }
-
-        .info-card {
-          text-align: center;
-        }
-
-        .info-label {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: #64748b;
-          margin-bottom: 8px;
-        }
-
-        .info-value {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #e2e8f0;
-        }
-
-        .notification-section {
-          background: rgba(15, 23, 42, 0.8);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 16px;
-          padding: 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
-
-        .notification-text {
-          font-size: 0.9rem;
-          color: #cbd5e1;
-        }
-
-        .reset-section {
-          background: rgba(15, 23, 42, 0.8);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(148, 163, 184, 0.1);
-          border-radius: 16px;
-          padding: 24px;
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-        }
-
-        .btn-danger {
-          background: linear-gradient(135deg, #ef4444, #991b1b);
-          color: white;
-          min-width: 140px;
-        }
-
-        .btn-danger:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
-        }
-
-        @media (max-width: 768px) {
-          .title {
-            font-size: 2.5rem;
-          }
-
-          .timer-display {
-            font-size: 2.5rem;
-            margin: 20px 0;
-          }
-
-          .info-section {
-            grid-template-columns: 1fr;
-          }
-
-          .stats-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .reset-section {
-            flex-direction: column;
-          }
-        }
-      `}</style>
-
-      <div className="zone-tracker">
-        {/* Header */}
-        <div className="header">
-          <h1 className="title">Zone Tracker</h1>
-          <p className="subtitle">Track your focus zones and stay in the zone</p>
-        </div>
-
-        {/* Info Section */}
-        <div className="info-section">
-          <div className="info-card">
-            <div className="info-label">Current Day</div>
-            <div className="info-value">{dayName}</div>
-          </div>
-          <div className="info-card">
-            <div className="info-label">Week</div>
-            <div className="info-value">Week {weekNumber}</div>
-          </div>
-          <div className="info-card">
-            <div className="info-label">Weekly Buffer</div>
-            <div className="info-value">{formatTimeShort(weeklyBuffer)}</div>
-          </div>
-        </div>
-
-        {/* Notification Section */}
-        <div className="notification-section">
-          <div className="notification-text">Enable notifications for zone alarms</div>
-          <button
-            onClick={handleNotificationPermission}
-            className={`btn btn-secondary ${notificationsEnabled ? 'active' : ''}`}
-            style={{
-              background: notificationsEnabled ? 'rgba(34, 197, 94, 0.2)' : undefined,
-              borderColor: notificationsEnabled ? 'rgba(34, 197, 94, 0.3)' : undefined,
-              color: notificationsEnabled ? '#86efac' : undefined,
-            }}
-          >
-            {notificationsEnabled ? '✓ Enabled' : 'Enable'}
-          </button>
-        </div>
-
-        {/* Main Timer */}
-        <div className="timer-section">
-          <div className="timer-header">
-            <span className="timer-label">Main Timer</span>
-            <span className="timer-badge">Focus Zone</span>
-          </div>
-          <div className="timer-display">{formatTime(timer)}</div>
-          <div className="button-group">
-            <button
-              onClick={() => setIsRunning(!isRunning)}
-              className={`btn btn-primary ${isRunning ? 'active' : ''}`}
-            >
-              {isRunning ? 'Pause' : 'Start'}
-            </button>
-            <button onClick={handleLogTime} className="btn btn-secondary">
-              Log Time
-            </button>
-          </div>
-
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-label">Daily Logged</div>
-              <div className="stat-value">{formatTimeShort(dayLogged)}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Weekly Logged</div>
-              <div className="stat-value">{formatTimeShort(weeklyLogged)}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Test Timer */}
-        <div className="timer-section" style={{ borderColor: 'rgba(245, 158, 11, 0.2)' }}>
-          <div className="timer-header">
-            <span className="timer-label">Test Timer</span>
-            <span className="timer-badge test">5 Sec Test</span>
-          </div>
-          <div className="timer-display test">{formatTime(testTimer)}</div>
-          <div className="button-group">
-            <button
-              onClick={() => setIsTestRunning(!isTestRunning)}
-              className={`btn btn-primary ${isTestRunning ? 'active' : ''}`}
-              style={{
-                background: isTestRunning
-                  ? 'linear-gradient(135deg, #ef4444, #991b1b)'
-                  : 'linear-gradient(135deg, #f59e0b, #b45309)',
-              }}
-            >
-              {isTestRunning ? 'Pause' : 'Start'}
-            </button>
-            <button onClick={handleTestLogTime} className="btn btn-secondary">
-              Log Time
-            </button>
-          </div>
-
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-label">Daily Logged</div>
-              <div className="stat-value test">{formatTimeShort(testDayLogged)}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Weekly Logged</div>
-              <div className="stat-value test">{formatTimeShort(testWeeklyLogged)}</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(245, 158, 11, 0.1)' }}>
-            <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '8px' }}>
-              Weekly Buffer (Test)
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#f59e0b' }}>
-              {testWeeklyBuffer}s / {TOTAL_TEST_WEEKLY_SECONDS}s
-            </div>
-          </div>
-        </div>
-
-        {/* Reset Section */}
-        <div className="reset-section">
-          <button onClick={handleResetDay} className="btn btn-danger">
-            Reset Day
-          </button>
-          <button onClick={handleResetWeek} className="btn btn-danger" style={{ opacity: 0.7 }}>
-            Reset Week
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Zone Tracker">
+<title>Zone Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;
+  --border:#2a2a2a;--border2:#333;
+  --text:#f0ede8;--text2:#888;--text3:#555;
+  --teal:#1D9E75;--amber:#BA7517;--coral:#D85A30;
+  --purple:#7F77DD;--red:#E24B4A;--gray:#888780;--blue:#378ADD;
+  --r:10px;--r-sm:6px;
 }
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:0;-webkit-tap-highlight-color:transparent;}
+.app{max-width:480px;margin:0 auto;padding:16px;padding-top:env(safe-area-inset-top,16px)}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:0.5px solid var(--border)}
+.header-left h1{font-size:18px;font-weight:800;letter-spacing:-0.5px}
+.header-left p{font-size:11px;color:var(--text2);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.reset-btn{font-size:10px;color:var(--text3);background:transparent;border:0.5px solid var(--border);border-radius:var(--r-sm);padding:5px 10px;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.15s}
+.reset-btn:hover{color:var(--text2);border-color:var(--border2)}
+.date-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.date-bar-left{font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text2)}
+.week-badge{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--surface2);border:0.5px solid var(--border);border-radius:4px;padding:3px 8px}
+.zones{display:flex;flex-direction:column;gap:8px}
+.zone-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color 0.2s}
+.zone-card.active{border-color:var(--zone-color)}
+.zone-card.cleared{opacity:0.5}
+.zone-top{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none}
+.zone-dot{width:8px;height:8px;border-radius:50%;background:var(--zone-color);flex-shrink:0}
+.zone-name{font-size:13px;font-weight:700;flex:1;letter-spacing:-0.2px}
+.zone-status{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.zone-play{width:32px;height:32px;border-radius:50%;border:0.5px solid var(--border2);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;flex-shrink:0}
+.zone-play:hover{background:var(--surface3)}
+.zone-play.active-btn{background:var(--zone-color);border-color:var(--zone-color)}
+.play-icon{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid var(--text);margin-left:2px}
+.zone-play.active-btn .play-icon{display:none}
+.pause-icon{display:none;width:8px;height:8px;position:relative}
+.pause-icon::before,.pause-icon::after{content:'';position:absolute;width:2.5px;height:8px;background:#000;border-radius:1px;top:0}
+.pause-icon::before{left:0}
+.pause-icon::after{right:0}
+.zone-play.active-btn .pause-icon{display:block}
+.zone-bars{padding:0 14px 12px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bar-label{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);width:34px;text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:4px;background:var(--surface3);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;background:var(--zone-color);transition:width 0.5s ease;max-width:100%}
+.bar-time{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);width:38px;text-align:right;flex-shrink:0}
+.cleared-badge{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--zone-color);padding:2px 8px;background:transparent;border:0.5px solid var(--zone-color);border-radius:3px;margin:0 14px 12px;display:inline-block}
+.active-indicator{height:2px;background:var(--zone-color);animation:pulse-bar 1.5s ease-in-out infinite}
+@keyframes pulse-bar{0%,100%{opacity:1}50%{opacity:0.4}}
+.bottom-bar{margin-top:16px;padding:12px 14px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center}
+.bottom-stat{text-align:center;flex:1}
+.bottom-stat-label{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.bottom-stat-val{font-size:14px;font-weight:800}
+.bottom-stat-val.warn{color:var(--amber)}
+.bottom-stat-val.good{color:var(--teal)}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--surface2);border:0.5px solid var(--border2);border-radius:var(--r-sm);padding:8px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text);opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:99;white-space:nowrap}
+.toast.show{opacity:1}
+.stat-divider{width:1px;height:24px;background:var(--border);margin:0 8px}
+.test-timer-section{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:14px;margin-top:16px}
+.test-timer-title{font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text2);margin-bottom:8px}
+.test-timer-display{font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;text-align:center;color:#FF9500;margin:10px 0}
+.test-timer-bar{display:flex;gap:6px;justify-content:center}
+.test-timer-btn{flex:1;padding:8px 12px;font-size:11px;font-weight:600;background:transparent;border:0.5px solid var(--border2);border-radius:var(--r-sm);color:var(--text2);cursor:pointer;transition:all 0.15s;font-family:'Syne',sans-serif}
+.test-timer-btn:hover{color:var(--text);border-color:var(--border)}
+.test-timer-btn.running{background:#FF9500;color:#000;border-color:#FF9500}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-left">
+      <h1>Zone Tracker</h1>
+      <p id="live-clock">--:-- --</p>
+    </div>
+    <button class="reset-btn" onclick="confirmResetDay()">Reset day</button>
+  </div>
+  <div class="date-bar">
+    <span class="date-bar-left" id="today-label">Monday</span>
+    <span class="week-badge" id="week-label">Week 1</span>
+  </div>
+  <div class="zones" id="zones-container"></div>
+  <div class="bottom-bar">
+    <div class="bottom-stat">
+      <div class="bottom-stat-label">daily logged</div>
+      <div class="bottom-stat-val" id="stat-daily">0h 0m</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="bottom-stat">
+      <div class="bottom-stat-label">weekly logged</div>
+      <div class="bottom-stat-val good" id="stat-weekly">0h 0m</div>
+    </div>
+  </div>
+  <div class="test-timer-section">
+    <div class="test-timer-title">Test Timer (5 Sec)</div>
+    <div class="test-timer-display" id="test-display">0:00</div>
+    <div class="test-timer-bar">
+      <button class="test-timer-btn" id="test-btn" onclick="toggleTestTimer()">Start</button>
+      <button class="test-timer-btn" onclick="resetTestTimer()">Reset</button>
+    </div>
+    <div style="font-size:9px;color:var(--text3);text-align:center;margin-top:6px;font-family:'JetBrains Mono',monospace">Weekly: <span id="test-weekly">0s / 20s</span></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const ZONES_DEF=[
+  {id:'health',name:'Health / Gym',color:'#1D9E75',dailyMins:60,weeklyMins:360,dailyNote:'6 days — skip on rest day',isBlock:false},
+  {id:'kirmedia',name:'Kirmedia',color:'#BA7517',dailyMins:86,weeklyMins:600,dailyNote:'Agency work',isBlock:false},
+  {id:'rjm',name:'RJM Production',color:'#D85A30',dailyMins:86,weeklyMins:600,dailyNote:'Grip / intern',isBlock:false},
+  {id:'education',name:'Education',color:'#7F77DD',dailyMins:86,weeklyMins:600,dailyNote:'Classes + self-study',isBlock:false},
+  {id:'reserve',name:'Reserve Work',color:'#E24B4A',dailyMins:0,weeklyMins:480,dailyNote:'Weekly block — log when it happens',isBlock:true},
+  {id:'recovery',name:'Recovery / Personal',color:'#888780',dailyMins:342,weeklyMins:2400,dailyNote:'Rest, meals, life',isBlock:false},
+  {id:'sleep',name:'Sleep',color:'#378ADD',dailyMins:540,weeklyMins:3780,dailyNote:'9 hrs/night',isBlock:false},
+];
+const TOTAL_WEEKLY_MINS=ZONES_DEF.reduce((a,z)=>a+z.weeklyMins,0);
+let testTimerSecs=0;
+let testTimerRunning=false;
+let testTimerInterval=null;
+let testWeeklySecs=0;
+function getKey(s){return 'zt_v2_'+s;}
+function now(){return Date.now();}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function weekStr(){const d=new Date(),day=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(day===0?6:day-1));return mon.toISOString().slice(0,10);}
+function loadState(){try{return JSON.parse(localStorage.getItem(getKey('state'))||'null');}catch(e){return null;}}
+function saveState(s){localStorage.setItem(getKey('state'),JSON.stringify(s));}
+function loadTestState(){try{return JSON.parse(localStorage.getItem(getKey('test'))||'null');}catch(e){return null;}}
+function saveTestState(s){localStorage.setItem(getKey('test'),JSON.stringify(s));}
+function freshDayData(){const d={};ZONES_DEF.forEach(z=>{d[z.id]={loggedMins:0,running:false,startedAt:null};});return d;}
+function freshWeekData(){const d={};ZONES_DEF.forEach(z=>{d[z.id]={loggedMins:0};});return d;}
+function initState(){
+  const td=todayStr(),wk=weekStr();
+  let s=loadState();
+  if(!s){s={today:td,week:wk,day:freshDayData(),weekData:freshWeekData()};saveState(s);return s;}
+  if(s.week!==wk){s.week=wk;s.weekData=freshWeekData();}
+  if(s.today!==td){
+    ZONES_DEF.forEach(z=>{
+      const dd=s.day[z.id];
+      if(dd&&dd.running&&dd.startedAt){const el=Math.floor((now()-dd.startedAt)/60000);dd.loggedMins+=el;dd.running=false;dd.startedAt=null;}
+      if(dd){s.weekData[z.id].loggedMins+=dd.loggedMins;}
+    });
+    s.today=td;s.day=freshDayData();
+  }
+  saveState(s);return s;
+}
+function initTestState(){
+  const wk=weekStr();
+  let s=loadTestState();
+  if(!s){s={week:wk,weekSecs:0};saveTestState(s);return s;}
+  if(s.week!==wk){s.week=wk;s.weekSecs=0;saveTestState(s);}
+  return s;
+}
+let STATE=initState();
+let TEST_STATE=initTestState();
+testWeeklySecs=TEST_STATE.weekSecs||0;
+function getLiveMins(zid){const dd=STATE.day[zid];if(!dd)return 0;let m=dd.loggedMins;if(dd.running&&dd.startedAt)m+=Math.floor((now()-dd.startedAt)/60000);return m;}
+function getWeekMins(zid){return(STATE.weekData[zid]?.loggedMins||0)+getLiveMins(zid);}
+function fmtMins(m){const h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60;return(m<0?'-':'')+h+'h '+mn+'m';}
+function fmtShort(m){const h=Math.floor(m/60),mn=m%60;return h>0?(h+'h '+(mn>0?mn+'m':'')):(mn+'m');}
+function pct(val,max){return max>0?Math.min(100,Math.round(val/max*100)):0;}
+function playAlert(){
+  const context=new(window.AudioContext||window.webkitAudioContext)();
+  const osc=context.createOscillator();
+  const gain=context.createGain();
+  osc.connect(gain);
+  gain.connect(context.destination);
+  osc.frequency.value=800;
+  gain.gain.setValueAtTime(0.3,context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01,context.currentTime+0.5);
+  osc.start(context.currentTime);
+  osc.stop(context.currentTime+0.5);
+}
+function notifyZoneComplete(zname){
+  playAlert();
+  if('Notification' in window&&Notification.permission==='granted'){
+    new Notification('Zone Complete!',{body:zname+' daily target reached',icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%231D9E75"/><path d="M35 50l15 15 35-35" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'});
+  }
+}
+function toggleZone(zid){
+  const z=ZONES_DEF.find(x=>x.id===zid);
+  const dd=STATE.day[zid];
+  if(!dd)return;
+  if(z.isBlock){showToast('Reserve: tap + to log hours directly');return;}
+  const dailyMins=getLiveMins(zid);
+  const weekMins=getWeekMins(zid);
+  if(weekMins>=z.weeklyMins&&!dd.running){showToast(z.name+' weekly target cleared!');return;}
+  if(dd.running){
+    const el=Math.floor((now()-dd.startedAt)/60000);
+    dd.loggedMins+=el;
+    const newTotal=dailyMins+el;
+    dd.running=false;dd.startedAt=null;
+    if(newTotal>=z.dailyMins){notifyZoneComplete(z.name);}
+    showToast(z.name+' paused — +'+el+'m logged');
+  } else {
+    ZONES_DEF.forEach(oz=>{const od=STATE.day[oz.id];if(od&&od.running&&od.startedAt){const el=Math.floor((now()-od.startedAt)/60000);od.loggedMins+=el;od.running=false;od.startedAt=null;}});
+    dd.running=true;dd.startedAt=now();
+    showToast(z.name+' started');
+  }
+  saveState(STATE);render();
+}
+function logReserve(){
+  const mins=prompt('Log Reserve hours:\nEnter minutes (e.g. 480 for 8 hours):');
+  if(!mins||isNaN(parseInt(mins)))return;
+  const m=Math.max(0,parseInt(mins));
+  STATE.day['reserve'].loggedMins+=m;
+  saveState(STATE);render();
+  showToast('Reserve: +'+fmtShort(m)+' logged');
+}
+function confirmResetDay(){
+  if(confirm('Reset today\'s timers? Weekly totals are preserved.')){
+    ZONES_DEF.forEach(z=>{
+      const dd=STATE.day[z.id];
+      if(dd&&dd.running&&dd.startedAt){
+        const el=Math.floor((now()-dd.startedAt)/60000);
+        dd.loggedMins+=el;
+        STATE.weekData[z.id].loggedMins+=dd.loggedMins;
+      }
+      STATE.day[z.id]={loggedMins:0,running:false,startedAt:null};
+    });
+    saveState(STATE);render();showToast('Day reset');
+  }
+}
+function toggleTestTimer(){
+  testTimerRunning=!testTimerRunning;
+  const btn=document.getElementById('test-btn');
+  if(testTimerRunning){
+    btn.textContent='Pause';
+    btn.classList.add('running');
+    testTimerInterval=setInterval(()=>{
+      testTimerSecs++;
+      testWeeklySecs++;
+      if(testTimerSecs>=5){
+        testTimerRunning=false;
+        clearInterval(testTimerInterval);
+        btn.textContent='Start';
+        btn.classList.remove('running');
+        playAlert();
+        showToast('Test timer complete!');
+      }
+      updateTestDisplay();
+    },1000);
+  } else {
+    btn.textContent='Start';
+    btn.classList.remove('running');
+    clearInterval(testTimerInterval);
+  }
+  updateTestDisplay();
+}
+function resetTestTimer(){
+  testTimerRunning=false;
+  clearInterval(testTimerInterval);
+  testTimerSecs=0;
+  document.getElementById('test-btn').textContent='Start';
+  document.getElementById('test-btn').classList.remove('running');
+  updateTestDisplay();
+}
+function updateTestDisplay(){
+  document.getElementById('test-display').textContent='0:'+testTimerSecs.toString().padStart(2,'0');
+  document.getElementById('test-weekly').textContent=testWeeklySecs+'s / 20s';
+  TEST_STATE.weekSecs=testWeeklySecs;
+  saveTestState(TEST_STATE);
+}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function render(){
+  const container=document.getElementById('zones-container');
+  if(!container)return;
+  let totalDailyLogged=0,totalWeeklyLogged=0;
+  const html=ZONES_DEF.map(z=>{
+    const liveMins=getLiveMins(z.id);
+    const weekMins=getWeekMins(z.id);
+    const dd=STATE.day[z.id];
+    const isRunning=dd?.running||false;
+    totalDailyLogged+=liveMins;
+    totalWeeklyLogged+=weekMins;
+    const weekCleared=weekMins>=z.weeklyMins;
+    const dailyPct=z.isBlock?0:pct(liveMins,z.dailyMins);
+    const weekPct=pct(weekMins,z.weeklyMins);
+    const dailyRemain=z.isBlock?0:Math.max(0,z.dailyMins-liveMins);
+    const weekRemain=Math.max(0,z.weeklyMins-weekMins);
+    const cardClass=['zone-card',isRunning?'active':'',weekCleared?'cleared':''].filter(Boolean).join(' ');
+    return `<div class="${cardClass}" style="--zone-color:${z.color}">
+      ${isRunning?'<div class="active-indicator"></div>':''}
+      <div class="zone-top" onclick="toggleZone('${z.id}')">
+        <div class="zone-dot"></div>
+        <div style="flex:1">
+          <div class="zone-name">${z.name}</div>
+          <div style="font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-top:1px">${z.dailyNote}</div>
+        </div>
+        <div class="zone-status">${isRunning?'running…':weekCleared?'✓ cleared':''}</div>
+        ${z.isBlock
+          ?`<button class="zone-play" onclick="event.stopPropagation();logReserve()" style="font-size:18px;color:var(--text2);font-weight:400">+</button>`
+          :`<button class="zone-play ${isRunning?'active-btn':''}" onclick="event.stopPropagation();toggleZone('${z.id}')">
+              <div class="play-icon"></div><div class="pause-icon"></div>
+            </button>`
+        }
+      </div>
+      ${weekCleared
+        ?`<div class="cleared-badge">weekly target cleared — ${fmtShort(weekMins)} logged</div>`
+        :`<div class="zone-bars">
+            ${!z.isBlock?`<div class="bar-row">
+              <span class="bar-label">today</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${dailyPct}%"></div></div>
+              <span class="bar-time">${dailyRemain>0?fmtShort(dailyRemain)+' left':'done'}</span>
+            </div>`:''}
+            <div class="bar-row">
+              <span class="bar-label">week</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${weekPct}%"></div></div>
+              <span class="bar-time">${weekRemain>0?fmtShort(weekRemain)+' left':'done'}</span>
+            </div>
+          </div>`
+      }
+    </div>`;
+  }).join('');
+  container.innerHTML=html;
+  document.getElementById('stat-daily').textContent=fmtMins(totalDailyLogged);
+  document.getElementById('stat-weekly').textContent=fmtMins(totalWeeklyLogged);
+}
+function updateClock(){
+  const n=new Date(),h=n.getHours(),m=n.getMinutes(),ampm=h>=12?'PM':'AM',hh=h%12||12;
+  document.getElementById('live-clock').textContent=hh+':'+(m<10?'0':'')+m+' '+ampm;
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  document.getElementById('today-label').textContent=days[n.getDay()];
+  const soy=new Date(n.getFullYear(),0,1),wk=Math.ceil(((n-soy)/86400000+soy.getDay()+1)/7);
+  document.getElementById('week-label').textContent='Week '+wk;
+}
+if('Notification' in window&&Notification.permission==='default'){
+  Notification.requestPermission();
+}
+updateClock();render();updateTestDisplay();
+setInterval(()=>{render();updateClock();},30000);
+setInterval(()=>{const td=todayStr();if(STATE.today!==td){STATE=initState();render();}},60000);
+setInterval(()=>{const wk=weekStr();if(TEST_STATE.week!==wk){TEST_STATE={week:wk,weekSecs:0};testWeeklySecs=0;saveTestState(TEST_STATE);updateTestDisplay();}},60000);
+</script>
+</body>
+</html>
