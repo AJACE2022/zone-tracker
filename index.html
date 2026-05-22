@@ -28,6 +28,11 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
 .date-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .date-bar-left{font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text2)}
 .week-badge{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--surface2);border:0.5px solid var(--border);border-radius:4px;padding:3px 8px}
+.notification-section{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.notification-text{font-size:11px;color:var(--text2)}
+.notification-btn{font-size:10px;color:var(--text3);background:transparent;border:0.5px solid var(--border);border-radius:var(--r-sm);padding:5px 10px;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.15s}
+.notification-btn:hover{color:var(--text2);border-color:var(--border2)}
+.notification-btn.enabled{color:var(--teal);border-color:var(--teal)}
 .zones{display:flex;flex-direction:column;gap:8px}
 .zone-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color 0.2s}
 .zone-card.active{border-color:var(--zone-color)}
@@ -86,6 +91,10 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
    <span class="date-bar-left" id="today-label">Monday</span>
    <span class="week-badge" id="week-label">Week 1</span>
  </div>
+ <div class="notification-section">
+   <span class="notification-text">Enable notifications for zone alarms</span>
+   <button class="notification-btn" id="notif-btn" onclick="requestNotifications()">Enable</button>
+ </div>
  <div class="zones" id="zones-container"></div>
  <div class="bottom-bar">
    <div class="bottom-stat">
@@ -120,7 +129,7 @@ const ZONES_DEF=[
  {id:'sleep',name:'Sleep',color:'#378ADD',dailyMins:540,weeklyMins:3780,dailyNote:'9 hrs/night',isBlock:false},
 ];
 const TOTAL_WEEKLY_MINS=ZONES_DEF.reduce((a,z)=>a+z.weeklyMins,0);
-let testTimerSecs=0;let testTimerRunning=false;let testTimerInterval=null;let testWeeklySecs=0;
+let testTimerSecs=0;let testTimerRunning=false;let testTimerInterval=null;let testWeeklySecs=0;let notificationsEnabled=false;
 function getKey(s){return 'zt_v2_'+s;}
 function now(){return Date.now();}
 function todayStr(){return new Date().toISOString().slice(0,10);}
@@ -140,11 +149,13 @@ function fmtMins(m){const h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60;return(
 function fmtShort(m){const h=Math.floor(m/60),mn=m%60;return h>0?(h+'h '+(mn>0?mn+'m':'')):(mn+'m');}
 function pct(val,max){return max>0?Math.min(100,Math.round(val/max*100)):0;}
 function playAlert(){const context=new(window.AudioContext||window.webkitAudioContext)();const osc=context.createOscillator();const gain=context.createGain();osc.connect(gain);gain.connect(context.destination);osc.frequency.value=800;gain.gain.setValueAtTime(0.3,context.currentTime);gain.gain.exponentialRampToValueAtTime(0.01,context.currentTime+0.5);osc.start(context.currentTime);osc.stop(context.currentTime+0.5);}
-function notifyZoneComplete(zname){playAlert();if('Notification' in window&&Notification.permission==='granted'){new Notification('Zone Complete!',{body:zname+' daily target reached',icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%231D9E75"/><path d="M35 50l15 15 35-35" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'});}}
-function toggleZone(zid){const z=ZONES_DEF.find(x=>x.id===zid);const dd=STATE.day[zid];if(!dd)return;if(z.isBlock){showToast('Reserve: tap + to log hours directly');return;}const dailyMins=getLiveMins(zid);const weekMins=getWeekMins(zid);if(weekMins>=z.weeklyMins&&!dd.running){showToast(z.name+' weekly target cleared!');return;}if(dd.running){const el=Math.floor((now()-dd.startedAt)/60000);dd.loggedMins+=el;const newTotal=dailyMins+el;dd.running=false;dd.startedAt=null;if(newTotal>=z.dailyMins){notifyZoneComplete(z.name);}showToast(z.name+' paused — +'+el+'m logged');}else{ZONES_DEF.forEach(oz=>{const od=STATE.day[oz.id];if(od&&od.running&&od.startedAt){const el=Math.floor((now()-od.startedAt)/60000);od.loggedMins+=el;od.running=false;od.startedAt=null;}});dd.running=true;dd.startedAt=now();showToast(z.name+' started');}saveState(STATE);render();}
+function sendNotification(zname){playAlert();if(notificationsEnabled&&'Notification' in window&&Notification.permission==='granted'){new Notification('Zone Complete! 🎯',{body:zname+' daily target reached',tag:'zone-complete',requireInteraction:true});}}
+function requestNotifications(){if('Notification' in window){if(Notification.permission==='granted'){notificationsEnabled=true;updateNotificationButton();}else if(Notification.permission!=='denied'){Notification.requestPermission().then(permission=>{if(permission==='granted'){notificationsEnabled=true;updateNotificationButton();}});}}}
+function updateNotificationButton(){const btn=document.getElementById('notif-btn');if(Notification.permission==='granted'){btn.textContent='✓ Enabled';btn.classList.add('enabled');notificationsEnabled=true;}else{btn.textContent='Enable';btn.classList.remove('enabled');notificationsEnabled=false;}}
+function toggleZone(zid){const z=ZONES_DEF.find(x=>x.id===zid);const dd=STATE.day[zid];if(!dd)return;if(z.isBlock){showToast('Reserve: tap + to log hours directly');return;}const dailyMins=getLiveMins(zid);const weekMins=getWeekMins(zid);if(weekMins>=z.weeklyMins&&!dd.running){showToast(z.name+' weekly target cleared!');return;}if(dd.running){const el=Math.floor((now()-dd.startedAt)/60000);dd.loggedMins+=el;const newTotal=dailyMins+el;dd.running=false;dd.startedAt=null;if(newTotal>=z.dailyMins){sendNotification(z.name);}showToast(z.name+' paused — +'+el+'m logged');}else{ZONES_DEF.forEach(oz=>{const od=STATE.day[oz.id];if(od&&od.running&&od.startedAt){const el=Math.floor((now()-od.startedAt)/60000);od.loggedMins+=el;od.running=false;od.startedAt=null;}});dd.running=true;dd.startedAt=now();showToast(z.name+' started');}saveState(STATE);render();}
 function logReserve(){const mins=prompt('Log Reserve hours:\nEnter minutes (e.g. 480 for 8 hours):');if(!mins||isNaN(parseInt(mins)))return;const m=Math.max(0,parseInt(mins));STATE.day['reserve'].loggedMins+=m;saveState(STATE);render();showToast('Reserve: +'+fmtShort(m)+' logged');}
 function confirmResetDay(){if(confirm('Reset today\'s timers? Weekly totals are preserved.')){ZONES_DEF.forEach(z=>{const dd=STATE.day[z.id];if(dd&&dd.running&&dd.startedAt){const el=Math.floor((now()-dd.startedAt)/60000);dd.loggedMins+=el;STATE.weekData[z.id].loggedMins+=dd.loggedMins;}STATE.day[z.id]={loggedMins:0,running:false,startedAt:null};});saveState(STATE);render();showToast('Day reset');}}
-function toggleTestTimer(){testTimerRunning=!testTimerRunning;const btn=document.getElementById('test-btn');if(testTimerRunning){btn.textContent='Pause';btn.classList.add('running');testTimerInterval=setInterval(()=>{testTimerSecs++;testWeeklySecs++;if(testTimerSecs>=5){testTimerRunning=false;clearInterval(testTimerInterval);btn.textContent='Start';btn.classList.remove('running');playAlert();showToast('Test timer complete!');}updateTestDisplay();},1000);}else{btn.textContent='Start';btn.classList.remove('running');clearInterval(testTimerInterval);}updateTestDisplay();}
+function toggleTestTimer(){testTimerRunning=!testTimerRunning;const btn=document.getElementById('test-btn');if(testTimerRunning){btn.textContent='Pause';btn.classList.add('running');testTimerInterval=setInterval(()=>{testTimerSecs++;testWeeklySecs++;if(testTimerSecs>=5){testTimerRunning=false;clearInterval(testTimerInterval);btn.textContent='Start';btn.classList.remove('running');playAlert();if(notificationsEnabled&&'Notification' in window&&Notification.permission==='granted'){new Notification('Test Timer Complete! ✓',{body:'5 second test timer finished',tag:'test-timer-complete',requireInteraction:true});}showToast('Test timer complete!');}updateTestDisplay();},1000);}else{btn.textContent='Start';btn.classList.remove('running');clearInterval(testTimerInterval);}updateTestDisplay();}
 function resetTestTimer(){testTimerRunning=false;clearInterval(testTimerInterval);testTimerSecs=0;document.getElementById('test-btn').textContent='Start';document.getElementById('test-btn').classList.remove('running');updateTestDisplay();}
 function updateTestDisplay(){document.getElementById('test-display').textContent='0:'+testTimerSecs.toString().padStart(2,'0');document.getElementById('test-weekly').textContent=testWeeklySecs+'s / 20s';TEST_STATE.weekSecs=testWeeklySecs;saveTestState(TEST_STATE);}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
@@ -181,11 +192,11 @@ function render(){const container=document.getElementById('zones-container');if(
      }
    </div>`;}).join('');container.innerHTML=html;document.getElementById('stat-daily').textContent=fmtMins(totalDailyLogged);document.getElementById('stat-weekly').textContent=fmtMins(totalWeeklyLogged);}
 function updateClock(){const n=new Date(),h=n.getHours(),m=n.getMinutes(),ampm=h>=12?'PM':'AM',hh=h%12||12;document.getElementById('live-clock').textContent=hh+':'+(m<10?'0':'')+m+' '+ampm;const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];document.getElementById('today-label').textContent=days[n.getDay()];const soy=new Date(n.getFullYear(),0,1),wk=Math.ceil(((n-soy)/86400000+soy.getDay()+1)/7);document.getElementById('week-label').textContent='Week '+wk;}
-if('Notification' in window&&Notification.permission==='default'){Notification.requestPermission();}
-updateClock();render();updateTestDisplay();
+updateNotificationButton();updateClock();render();updateTestDisplay();
 setInterval(()=>{render();updateClock();},30000);
 setInterval(()=>{const td=todayStr();if(STATE.today!==td){STATE=initState();render();}},60000);
 setInterval(()=>{const wk=weekStr();if(TEST_STATE.week!==wk){TEST_STATE={week:wk,weekSecs:0};testWeeklySecs=0;saveTestState(TEST_STATE);updateTestDisplay();}},60000);
 </script>
 </body>
 </html>
+
