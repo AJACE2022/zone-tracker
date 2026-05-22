@@ -25,6 +25,9 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
 .header-left p{font-size:11px;color:var(--text2);margin-top:2px;font-family:'JetBrains Mono',monospace}
 .reset-btn{font-size:10px;color:var(--text3);background:transparent;border:0.5px solid var(--border);border-radius:var(--r-sm);padding:5px 10px;cursor:pointer;font-family:'Syne',sans-serif;transition:all 0.15s}
 .reset-btn:hover{color:var(--text2);border-color:var(--border2)}
+.notif-bar{background:var(--surface2);border:0.5px solid var(--border2);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.notif-bar p{font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;flex:1}
+.notif-btn{font-size:10px;font-family:'Syne',sans-serif;background:var(--teal);color:#fff;border:none;border-radius:var(--r-sm);padding:5px 12px;cursor:pointer;white-space:nowrap}
 .date-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .date-bar-left{font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text2)}
 .week-badge{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--surface2);border:0.5px solid var(--border);border-radius:4px;padding:3px 8px}
@@ -74,6 +77,12 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
     </div>
     <button class="reset-btn" onclick="confirmReset()">Reset day</button>
   </div>
+
+  <div class="notif-bar" id="notif-bar">
+    <p id="notif-status">Enable notifications for zone alarms</p>
+    <button class="notif-btn" id="notif-btn" onclick="requestNotifPermission()">Enable</button>
+  </div>
+
   <div class="date-bar">
     <span class="date-bar-left" id="today-label">Monday</span>
     <span class="week-badge" id="week-label">Week 1</span>
@@ -95,6 +104,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
 <script>
 const ZONES_DEF=[
   {id:'health',name:'Health / Gym',color:'#1D9E75',dailyMins:60,weeklyMins:360,dailyNote:'6 days — skip on rest day',isBlock:false},
@@ -106,7 +116,57 @@ const ZONES_DEF=[
   {id:'sleep',name:'Sleep',color:'#378ADD',dailyMins:540,weeklyMins:3780,dailyNote:'9 hrs/night',isBlock:false},
 ];
 const TOTAL_WEEKLY_MINS=ZONES_DEF.reduce((a,z)=>a+z.weeklyMins,0);
-function getKey(s){return 'zt_v2_'+s;}
+
+let notifGranted=false;
+function updateNotifBar(){
+  const bar=document.getElementById('notif-bar');
+  const status=document.getElementById('notif-status');
+  const btn=document.getElementById('notif-btn');
+  if(!('Notification' in window)){
+    status.textContent='Notifications not supported on this browser';
+    btn.style.display='none';return;
+  }
+  if(Notification.permission==='granted'){
+    notifGranted=true;
+    status.textContent='Notifications on — zone alarms active';
+    btn.textContent='On';btn.style.background='#444';btn.style.cursor='default';
+    return;
+  }
+  if(Notification.permission==='denied'){
+    status.textContent='Notifications blocked — enable in iOS Settings';
+    btn.style.display='none';return;
+  }
+  status.textContent='Enable notifications for zone alarms';
+  btn.textContent='Enable';
+}
+async function requestNotifPermission(){
+  if(!('Notification' in window))return;
+  const result=await Notification.requestPermission();
+  if(result==='granted'){notifGranted=true;}
+  updateNotifBar();
+}
+function scheduleNotif(zoneName,secsFromNow){
+  if(!notifGranted)return;
+  const key='notif_timeout_'+zoneName;
+  if(window[key])clearTimeout(window[key]);
+  if(secsFromNow<=0){fireNotif(zoneName);return;}
+  window[key]=setTimeout(()=>fireNotif(zoneName),secsFromNow*1000);
+}
+function cancelNotif(zoneName){
+  const key='notif_timeout_'+zoneName;
+  if(window[key]){clearTimeout(window[key]);window[key]=null;}
+}
+function fireNotif(zoneName){
+  if(!notifGranted)return;
+  new Notification('Zone complete: '+zoneName,{
+    body:'Daily target hit — switch zones or log it.',
+    tag:zoneName,
+    renotify:true,
+    requireInteraction:true,
+  });
+}
+
+function getKey(s){return 'zt_v3_'+s;}
 function now(){return Date.now();}
 function todayStr(){return new Date().toISOString().slice(0,10);}
 function weekStr(){const d=new Date(),day=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(day===0?6:day-1));return mon.toISOString().slice(0,10);}
@@ -145,11 +205,21 @@ function toggleZone(zid){
   if(dd.running){
     const el=Math.floor((now()-dd.startedAt)/60000);
     dd.loggedMins+=el;dd.running=false;dd.startedAt=null;
+    cancelNotif(z.name);
     showToast(z.name+' paused — +'+el+'m logged');
   } else {
-    ZONES_DEF.forEach(oz=>{const od=STATE.day[oz.id];if(od&&od.running&&od.startedAt){const el=Math.floor((now()-od.startedAt)/60000);od.loggedMins+=el;od.running=false;od.startedAt=null;}});
+    ZONES_DEF.forEach(oz=>{
+      const od=STATE.day[oz.id];
+      if(od&&od.running&&od.startedAt){
+        const el=Math.floor((now()-od.startedAt)/60000);
+        od.loggedMins+=el;od.running=false;od.startedAt=null;
+        cancelNotif(ZONES_DEF.find(x=>x.id===oz.id)?.name||oz.id);
+      }
+    });
     dd.running=true;dd.startedAt=now();
-    showToast(z.name+' started');
+    const remainMins=Math.max(0,z.dailyMins-dd.loggedMins);
+    if(remainMins>0)scheduleNotif(z.name,remainMins*60);
+    showToast(z.name+' started'+(remainMins>0?' — alarm in '+fmtShort(remainMins):''));
   }
   saveState(STATE);render();
 }
@@ -162,12 +232,12 @@ function logReserve(){
   showToast('Reserve: +'+fmtShort(m)+' logged');
 }
 function confirmReset(){
-  if(confirm('Reset today\'s timers? Weekly totals are preserved.')){
-    ZONES_DEF.forEach(z=>{STATE.day[z.id]={loggedMins:0,running:false,startedAt:null};});
-    saveState(STATE);render();showToast('Day reset');
+  if(confirm('Reset today\'s timers only?\nWeekly totals are NOT affected.')){
+    ZONES_DEF.forEach(z=>{cancelNotif(z.name);STATE.day[z.id]={loggedMins:0,running:false,startedAt:null};});
+    saveState(STATE);render();showToast('Day reset — weekly totals unchanged');
   }
 }
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function render(){
   const container=document.getElementById('zones-container');
   if(!container)return;
@@ -177,8 +247,7 @@ function render(){
     const weekMins=getWeekMins(z.id);
     const dd=STATE.day[z.id];
     const isRunning=dd?.running||false;
-    totalDailyLogged+=liveMins;
-    weeklyUsed+=weekMins;
+    totalDailyLogged+=liveMins;weeklyUsed+=weekMins;
     const weekCleared=weekMins>=z.weeklyMins;
     if(weekCleared)clearedCount++;
     const dailyPct=z.isBlock?0:pct(liveMins,z.dailyMins);
@@ -234,6 +303,8 @@ function updateClock(){
   const soy=new Date(n.getFullYear(),0,1),wk=Math.ceil(((n-soy)/86400000+soy.getDay()+1)/7);
   document.getElementById('week-label').textContent='Week '+wk;
 }
+updateNotifBar();
+if(Notification.permission==='granted')notifGranted=true;
 updateClock();render();
 setInterval(()=>{render();updateClock();},30000);
 setInterval(()=>{const td=todayStr();if(STATE.today!==td){STATE=initState();render();}},60000);
